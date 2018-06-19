@@ -519,7 +519,11 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 				mml.GetChannel(mt[i].getChannel()).AddSetNote(mt[i].tick, NOTE_OFF_NUMBER, mt[i].getP2(), mf.getTPQ());
 				break;
 			case 0xC0://ÒôÉ«±ä»»
-				pcc.AddProgram(mml.GetChannel(mt[i].getChannel()).AddSetProgram(mt[i].getP1()));
+			{
+				int _pc = mml.GetChannel(mt[i].getChannel()).AddSetProgram(mt[i].getP1());
+				if (mt[i].getChannel() < 6)
+					pcc.AddProgram(_pc);
+			}
 				break;
 			case 0xB0://CC¿ØÖÆÆ÷
 				switch (mt[i].getP1())
