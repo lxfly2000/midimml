@@ -451,8 +451,7 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,const wchar_t
 			else if (mt[i].isTimeSignature())
 			{
 				//https://github.com/lxfly2000/libMidiPlayer/blob/lib_static/MidiPlayer.cpp#L266
-				for (int c = 0; c < CHANNEL_COUNT; c++)
-					mml.SetBeatsPerBar(mt[i].data()[3]);
+				mml.SetBeatsPerBar(mt[i].data()[3]);
 			}
 		}
 		else
