@@ -60,10 +60,14 @@ private:
 	uint8_t last_note_num;//0~255,255=Off
 	uint8_t last_note_volume;
 	int last_note_tick;
-	int oct_offset_to_midi;//与MIDI中八度的差距
+	int oct_offset_from_midi;//MIDI到MML的八度偏移
 	int deflen;
 	int last_midi_octave;
 public:
+	FMChannelBase()
+	{
+		SetOctaveOffsetToMIDI(0);
+	}
 	std::string GetStrChannel()
 	{
 		return ssChannel.str();
@@ -91,20 +95,20 @@ public:
 		cc_sub = 0;
 		last_note_num = NOTE_OFF_NUMBER;
 		last_note_tick = 0;
-		SetOctaveOffsetToMIDI(1);
 		AddSetAbsoluteOctaveFromMIDI(5);
 		AddSetDefaultNoteLength(4);
 		AddSetVolume(127);
 	}
+	//设置MIDI到MML的八度偏移
 	void SetOctaveOffsetToMIDI(int offset)
 	{
-		oct_offset_to_midi = offset;
+		oct_offset_from_midi = offset;
 	}
 	//PMDB2:1~5
 	void AddSetAbsoluteOctaveFromMIDI(int o)
 	{
 		last_midi_octave = o;
-		AddString("o").AddInt(last_midi_octave - oct_offset_to_midi);
+		AddString("o").AddInt(last_midi_octave + oct_offset_from_midi);
 	}
 	//设置默认音符长度为l分音符
 	void AddSetDefaultNoteLength(int l)
@@ -400,7 +404,7 @@ std::string GetFileNameFromPath(const wchar_t *path)
 }
 
 
-int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,const wchar_t *ff_file)
+int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offset,const wchar_t *ff_file)
 {
 	MMLData mml;
 	mml.AddMetaString(mml.metaNames.meta_title, GetFileNameFromPath(midi_file).c_str());
@@ -430,6 +434,8 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,const wchar_t
 	mml.AddComment("==============");
 	mml.AddComment("Init");
 	mml.AddComment("==============");
+	for (int i = 0; i < CHANNEL_COUNT; i++)
+		mml.GetChannel(i).SetOctaveOffsetToMIDI(oct_offset);
 	mml.Init();
 	mml.AddNewLine();
 
@@ -515,11 +521,14 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,const wchar_t
 int wmain(int argc, wchar_t *argv[])
 {
 	wchar_t midi_file[_MAX_PATH] = L"", mml_file[_MAX_PATH] = L"", ff_file[_MAX_PATH] = L"";
+	int oct_offset = 0;
 	std::locale::global(std::locale(""));
 	switch(argc)
 	{
+	case 5:
+		wcscpy_s(ff_file, argv[4]);
 	case 4:
-		wcscpy_s(ff_file, argv[3]);
+		oct_offset = _wtoi(argv[3]);
 	case 3:
 		wcscpy_s(mml_file, argv[2]);
 	case 2:
@@ -528,7 +537,7 @@ int wmain(int argc, wchar_t *argv[])
 			swprintf_s(mml_file, L"%s.mml", midi_file);
 		break;
 	default:
-		_putws(L"命令行：midimml <MIDI文件> [MML文件] [音色定义文件]");
+		_putws(L"命令行：midimml <MIDI文件> [MML文件] [整体八度调整] [音色定义文件]");
 #ifdef _DEBUG
 		_getws_s(midi_file);
 		wcscpy_s(mml_file, L"o.mml");
@@ -536,5 +545,5 @@ int wmain(int argc, wchar_t *argv[])
 #endif
 		return 1;
 	}
-	return ConvertToMML(midi_file, mml_file, ff_file);
+	return ConvertToMML(midi_file, mml_file, oct_offset, ff_file);
 }
