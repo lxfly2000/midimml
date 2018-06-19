@@ -185,7 +185,7 @@ public:
 	{
 		//需要处理的事情有：
 		//Tick差对应的音符长，八度，音量变化，写入音符
-		float note_divnum = NOTE_DIVNUM_INFINITY;//有效取值范围为1~255，INFINITY表示该事件长度为0,TODO:如果是好几节的长度怎么办？
+		float note_divnum = NOTE_DIVNUM_INFINITY;//有效取值范围为1~255，INFINITY表示该事件长度为0
 		if (tick > last_note_tick)
 			note_divnum = 4.0f*tpq / (tick - last_note_tick);//上一个音符是几分音符
 		if (note_divnum != NOTE_DIVNUM_INFINITY)
@@ -365,6 +365,10 @@ public:
 	{
 		ssMML << ";" << str << std::endl;
 	}
+	void AddMMLLine(const char *str)
+	{
+		ssMML << str << std::endl;
+	}
 	//如果通道号大于9则返回第三通道
 	FMChannelBase &GetChannel(unsigned ch)
 	{
@@ -462,6 +466,15 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 	mml.AddNewLine();
 
 	mml.AddComment("==============");
+	mml.AddComment("Default voices, you can modify or delete them.");
+	mml.AddComment("==============");
+	mml.AddMMLLine("@0 4 7\n"
+		"28  0 8 0 3 35 2 12 3 0 0\n"
+		"26 10 7 6 2  0 1  4 3 0 0\n"
+		"28  0 8 0 3 33 2 12 7 0 0\n"
+		"26 10 7 6 2  0 1  4 7 0 0");
+	mml.AddNewLine();
+	mml.AddComment("==============");
 	mml.AddComment("Init");
 	mml.AddComment("==============");
 	for (int i = 0; i < CHANNEL_COUNT; i++)
@@ -547,7 +560,7 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 	mml.CommitAllChannelData();
 	mml.AddNewLine();
 	mml.AddComment("==============");
-	mml.AddComment("Using Programs");
+	mml.AddComment("Using voices");
 	mml.AddComment("==============");
 	pcc.SortAscending();
 	std::stringstream sspcc;
