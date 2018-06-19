@@ -28,11 +28,13 @@ MML消息：
 #include<iostream>
 #include<ctime>
 #include<algorithm>
+#include<map>
 #include<Windows.h>
 
 #define NOTE_OFF_NUMBER 255
 #define CHANNEL_COUNT	10
 #define ZENLEN_DEFAULT	96
+#define PROGRAM_DEFAULT	0
 #define NOTE_DIVNUM_INFINITY	256.0f//表示事件长度为0
 namespace MMLNotes
 {
@@ -48,7 +50,7 @@ namespace MMLNotes
 }
 
 //note_divnum:几分音符
-std::string GetNoteQuantitized(int note, float note_divnum, int deflen,int zenlen)
+std::string GetNoteQuantitized(int note, float note_divnum, int deflen,int zenlen,bool isRhythmChannel)
 {
 	std::stringstream ss;
 	std::vector<int>cdivnum;//zenlen的整除数（可以使用几分音符）
@@ -67,7 +69,12 @@ std::string GetNoteQuantitized(int note, float note_divnum, int deflen,int zenle
 			break;
 		}
 		if (ss.str().length() > 0)
-			ss << "&";
+		{
+			if (isRhythmChannel)
+				note = NOTE_OFF_NUMBER;
+			else
+				ss << "&";
+		}
 		ss << MMLNotes::GetMMLNoteName(note);
 		if (cdivnum.front() != deflen)
 			ss << cdivnum.front();
@@ -78,27 +85,34 @@ std::string GetNoteQuantitized(int note, float note_divnum, int deflen,int zenle
 
 class FMChannelBase
 {
-private:
+protected:
 	std::stringstream ssChannel;
-
-	uint8_t cc_sub;//奇数时+128，偶数时不加
+	std::string channel_name;
 	uint8_t last_note_num;//0~255,255=Off
 	uint8_t last_note_volume;
 	int last_note_tick;
-	int oct_offset_from_midi;//MIDI到MML的八度偏移
 	int deflen;
 	int zenlen;
+private:
+	uint8_t cc_sub;//奇数时+128，偶数时不加
+	int oct_offset_from_midi;//MIDI到MML的八度偏移
 	int last_midi_octave;
 public:
 	FMChannelBase():zenlen(ZENLEN_DEFAULT)
 	{
 		SetOctaveOffsetToMIDI(0);
 	}
-	std::string GetStrChannel()
+	void SetChannelName(const char *c)
 	{
-		return ssChannel.str();
+		channel_name.assign(c);
 	}
-	void Clear()
+	virtual std::string GetStrToCommit()
+	{
+		std::stringstream dataToCommit;
+		dataToCommit << channel_name << "\t" << ssChannel.str() << std::endl;
+		return dataToCommit.str();
+	}
+	virtual void Clear()
 	{
 		ssChannel.str("");
 	}
@@ -149,7 +163,7 @@ public:
 		AddString("C").AddInt(zenlen);
 	}
 	//0~127
-	int AddSetProgram(int program)
+	virtual int AddSetProgram(int program)
 	{
 		if (cc_sub % 2 == 1)
 			program += 128;
@@ -181,7 +195,7 @@ public:
 	{
 		AddString(toRight ? ">" : "<");
 	}
-	virtual void AddSetNote(int tick, uint8_t note, uint8_t vol, int tpq)
+	virtual void AddSetNote(int tick, uint8_t note, uint8_t velocity, int tpq)
 	{
 		//需要处理的事情有：
 		//Tick差对应的音符长，八度，音量变化，写入音符
@@ -189,7 +203,7 @@ public:
 		if (tick > last_note_tick)
 			note_divnum = 4.0f*tpq / (tick - last_note_tick);//上一个音符是几分音符
 		if (note_divnum != NOTE_DIVNUM_INFINITY)
-			AddString(GetNoteQuantitized(last_note_num, note_divnum, deflen, zenlen).c_str());
+			AddString(GetNoteQuantitized(last_note_num, note_divnum, deflen, zenlen,false).c_str());
 
 		if (note != NOTE_OFF_NUMBER)
 		{
@@ -209,10 +223,10 @@ public:
 					AddOctaveShift(false);
 				} while (++delta_octave);
 			}
-			if (vol != last_note_volume)
+			if (velocity != last_note_volume)
 			{
-				AddSetVolume(vol);
-				last_note_volume = vol;
+				AddSetVolume(velocity);
+				last_note_volume = velocity;
 			}
 		}
 		last_note_tick = tick;
@@ -235,7 +249,7 @@ public:
 	void AddChannelInit()override
 	{
 		FMChannelBase::AddChannelInit();
-		AddSetProgram(0);
+		AddSetProgram(PROGRAM_DEFAULT);
 	}
 };
 
@@ -249,7 +263,7 @@ public:
 	}
 };
 
-class RhythmDef
+/*class RhythmDef
 {
 private:
 	std::vector<std::string> vRhythms;
@@ -271,14 +285,109 @@ public:
 				return true;
 		return false;
 	}
-};
+};*/
 
 class KRhythmChannel :public FMChannelBase
 {
+private:
+	int r_counter;
+	std::map<int,int>midi_to_mml_rhythm;//K:MIDI键位，V:MML值
+	int mem_note_num;//用于保存音色变换之前的一个音色
 public:
-	void AddSetNote(int tick, uint8_t note, uint8_t vol, int tpq)override
+	KRhythmChannel():r_counter(0)
 	{
-		//TODO:节奏通道处理
+		//https://github.com/lxfly2000/pmdplay
+		std::pair<int, int> table[] = {
+			{36,1},//	□Bass
+			{37,32},//	■Rim
+			{38,2},//	□Snare
+			{39,64},//	■Clap
+			{40,64},//	□SD2
+			{41,4},//	□Low Tom
+			{42,128},//	■Closed Hat
+			{43,4},//	□Low Tom
+			{44,128},//	■Pedal Hat
+			{45,8},//	□Mid Tom
+			{46,256},//	■Open Hat
+			{47,8},//	□Mid Tom
+			{48,16},//	□Hi Tom
+			{49,512},//	■Crash Cymbal 1
+			{50,16},//	□Hi Tom
+			{51,1024},//	■Ride Cymbal 1
+			{52,512},//	□Chinese Cymbal
+			{53,1024},//	□Ride Bell
+			{54,1024},//	■Tambourine
+			{55,512},//	□Splash Cymbal
+			{56,32},//	■Cowbell
+			{57,512},//	□Crash Cymbal 2
+			{58,1024},//	■Vibra-slap
+			{59,1024},//	□Ride Cymbal 2
+		};
+		for (auto&p : table)
+			midi_to_mml_rhythm.insert(p);
+	}
+	void AddChannelInit()override
+	{
+		FMChannelBase::AddChannelInit();
+		last_note_num = 0;//在此处表示@值
+		mem_note_num = 0;
+	}
+	void AddSetNote(int tick, uint8_t note, uint8_t velocity, int tpq)override
+	{
+		//注意此处的note是放在程序变换里的
+		if (note == NOTE_OFF_NUMBER)
+			return;
+		else if (velocity == 0)
+			return;
+		//https://blog.csdn.net/txh0001/article/details/6243295
+		else if (midi_to_mml_rhythm.find(note) == midi_to_mml_rhythm.end())
+			return;
+		float note_divnum = NOTE_DIVNUM_INFINITY;//有效取值范围为1~255，INFINITY表示该事件长度为0
+		if (tick > last_note_tick)
+			note_divnum = 4.0f*tpq / (tick - last_note_tick);//上一个音符是几分音符
+		if (note_divnum == NOTE_DIVNUM_INFINITY)//与之前相同的tick
+		{
+			last_note_num |= midi_to_mml_rhythm[note];
+		}
+		else//tick向前移动
+		{
+			if (mem_note_num != last_note_num)
+				AddSetProgram(last_note_num);
+			AddString(GetNoteQuantitized(0, note_divnum, deflen, zenlen, true).c_str());
+			last_note_num = midi_to_mml_rhythm[note];
+			last_note_tick = tick;
+		}
+		//K通道的音量暂时不做处理（暂定）
+	}
+	void FlushNote()
+	{
+		//TODO:Bug:节奏中缺少最后一个音
+	}
+	int AddSetProgram(int program)override
+	{
+		AddString("@").AddInt(program);
+		mem_note_num = program;
+		return program;
+	}
+	void AddSetVolume(uint8_t v)override
+	{
+		return FMChannelBase::AddSetVolume(v / 8);
+	}
+	std::string GetStrToCommit()override
+	{
+		std::stringstream dataToCommit;
+		dataToCommit << "R" << r_counter << "\t" << ssChannel.str() << std::endl << channel_name << "\tR" << r_counter << std::endl;
+		return dataToCommit.str();
+	}
+	//K通道的Clear操作会使R计数器加1
+	void Clear()override
+	{
+		if (ssChannel.str().length() == 0)
+			return;
+		r_counter++;
+		if (r_counter > 255)
+			std::cout << "R节奏定义数量超过上限。\n";
+		return FMChannelBase::Clear();
 	}
 };
 
@@ -307,6 +416,7 @@ public:
 				pfmChannels[i] = &fmChannelsSSGPart[i - 6];
 			else
 				pfmChannels[i] = &fmChannelsKRPart;
+			pfmChannels[i]->SetChannelName(channelNames[i]);
 		}
 	}
 	void Init()
@@ -354,7 +464,7 @@ public:
 	{
 		if (pfmChannels[ch]->GetChannelStream().str().length() > 0)
 		{
-			ssMML << channelNames[ch] << "\t" << pfmChannels[ch]->GetStrChannel() << std::endl;
+			ssMML << pfmChannels[ch]->GetStrToCommit();
 			pfmChannels[ch]->Clear();
 		}
 	}
@@ -482,7 +592,7 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 	mml.AddComment("==============");
 	mml.AddComment("Default voices, you can modify or delete them.");
 	mml.AddComment("==============");
-	mml.AddMMLLine("@0 4 7\n"
+	mml.AddMMLLine("@" _CRT_STRINGIZE(PROGRAM_DEFAULT) " 4 7\n"
 		"28  0 8 0 3 35 2 12 3 0 0\n"
 		"26 10 7 6 2  0 1  4 3 0 0\n"
 		"28  0 8 0 3 33 2 12 7 0 0\n"
@@ -503,6 +613,7 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 	mf.joinTracks();
 	smf::MidiEventList &mt = mf[0];
 	ProgramChangeCollector pcc;//音色收集器
+	pcc.AddProgram(PROGRAM_DEFAULT);
 	for (int i = 0; i < mt.getEventCount(); i++)
 	{
 		if (mt[i].isMeta())
