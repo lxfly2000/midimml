@@ -181,7 +181,7 @@ public:
 	{
 		AddString(toRight ? ">" : "<");
 	}
-	void AddSetNote(int tick, uint8_t note, uint8_t vol, int tpq)
+	virtual void AddSetNote(int tick, uint8_t note, uint8_t vol, int tpq)
 	{
 		//需要处理的事情有：
 		//Tick差对应的音符长，八度，音量变化，写入音符
@@ -273,13 +273,23 @@ public:
 	}
 };
 
+class KRhythmChannel :public FMChannelBase
+{
+public:
+	void AddSetNote(int tick, uint8_t note, uint8_t vol, int tpq)override
+	{
+		//TODO:节奏通道处理
+	}
+};
+
 //PMD专用格式MML文件
 class MMLData
 {
 private:
 	std::stringstream ssMML;
 	FMChannel fmChannelsFMPart[6];//ABC DEF
-	SSGChannel fmChannelsSSGPart[4];//GHI K
+	SSGChannel fmChannelsSSGPart[3];//GHI
+	KRhythmChannel fmChannelsKRPart;//K
 	FMChannelBase *pfmChannels[CHANNEL_COUNT];
 
 	//R定义采用按小节定义的方式，从后往前查重，这样可以减少一些重复。
@@ -290,10 +300,14 @@ public:
 	MMLData()
 	{
 		for (int i = 0; i < CHANNEL_COUNT; i++)
+		{
 			if (i < 6)
 				pfmChannels[i] = &fmChannelsFMPart[i];
-			else
+			else if (i < 9)
 				pfmChannels[i] = &fmChannelsSSGPart[i - 6];
+			else
+				pfmChannels[i] = &fmChannelsKRPart;
+		}
 	}
 	void Init()
 	{
@@ -558,7 +572,6 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 				}
 				break;
 			}
-			//TODO:节奏通道怎么处理？
 		}
 	}
 	mml.CommitAllChannelData();
