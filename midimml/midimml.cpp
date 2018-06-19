@@ -157,34 +157,34 @@ public:
 			//TODO:´ý²âÊÔ
 			if ((int)note_divnum != deflen)
 				AddInt((int)note_divnum);
-
-			if (note != NOTE_OFF_NUMBER)
-			{
-				int delta_octave = note / 12 - last_midi_octave;
-				if (delta_octave > 0)
-				{
-					do
-					{
-						AddOctaveShift(true);
-					} while (--delta_octave);
-				}
-				else if (delta_octave < 0)
-				{
-					do
-					{
-						AddOctaveShift(false);
-					} while (++delta_octave);
-				}
-				if (vol != last_note_volume)
-				{
-					AddSetVolume(vol);
-					last_note_volume = vol;
-				}
-				last_midi_octave += delta_octave;
-			}
-			last_note_tick = tick;
-			last_note_num = note;
 		}
+
+		if (note != NOTE_OFF_NUMBER)
+		{
+			int delta_octave = note / 12 - last_midi_octave;
+			last_midi_octave += delta_octave;
+			if (delta_octave > 0)
+			{
+				do
+				{
+					AddOctaveShift(true);
+				} while (--delta_octave);
+			}
+			else if (delta_octave < 0)
+			{
+				do
+				{
+					AddOctaveShift(false);
+				} while (++delta_octave);
+			}
+			if (vol != last_note_volume)
+			{
+				AddSetVolume(vol);
+				last_note_volume = vol;
+			}
+		}
+		last_note_tick = tick;
+		last_note_num = note;
 	}
 	void AddLoopPoint()
 	{
