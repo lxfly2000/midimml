@@ -2,13 +2,13 @@
 
 /*
 需要处理的消息：
-主音色变换OK，CC0音色变换（音色+128，要变量）OK，速度变换OK，音量变化，CC#10平衡变化OK，音符开/关（要变量）
+主音色变换OK，CC0音色变换（音色+128，要变量）OK，速度变换OK，音量变化OK，CC#10平衡变化OK，音符开/关（要变量）OK
 暂不处理的消息：
 *滑音，*发出量控制（Expression），*震音（Modulation）
 
 MML消息：
-音色变换OK，音量，八度变换（要变量），*默认音符长度定义（有默认值为4故可略），速度变换OK，
-音符，休止符，循环点（CC#111位置）OK，*量化修改，*LFO设置，*SSG波形设置
+音色变换OK，音量OK，八度变换（要变量）OK，*默认音符长度定义（有默认值为4故可略），速度变换OK，
+音符OK，休止符OK，循环点（CC#111位置）OK，*量化修改，*LFO设置，*SSG波形设置
 */
 
 
@@ -32,6 +32,7 @@ MML消息：
 
 #define NOTE_OFF_NUMBER 255
 #define CHANNEL_COUNT	10
+#define ZENLEN_DEFAULT	96
 #define NOTE_DIVNUM_INFINITY	256.0f//表示事件长度为0
 namespace MMLNotes
 {
@@ -46,10 +47,34 @@ namespace MMLNotes
 	}
 }
 
-enum MIDIMetaEventType
+//note_divnum:几分音符
+std::string GetNoteQuantitized(int note, float note_divnum, int deflen,int zenlen)
 {
-	MIDI_META_BEATS_PER_BAR = 88
-};
+	std::stringstream ss;
+	std::vector<int>cdivnum;//zenlen的整除数（可以使用几分音符）
+	for (int i = 1; i <= zenlen / 2; i++)
+		if (zenlen%i == 0)
+			cdivnum.push_back(i);
+	float note_ticks = zenlen / note_divnum;
+	int ticksum = 0;
+	while (ticksum<note_ticks)
+	{
+		while (ticksum + zenlen / cdivnum.front() > note_ticks)
+			cdivnum.erase(cdivnum.begin());
+		if (cdivnum.empty())
+		{
+			std::cout << "遇到解析度超出范围的音符\""<<MMLNotes::GetMMLNoteName(note)<<"\", 分度："<<note_divnum<<"分音符，时钟长度："<<note_ticks<<"。\n";
+			break;
+		}
+		if (ss.str().length() > 0)
+			ss << "&";
+		ss << MMLNotes::GetMMLNoteName(note);
+		if (cdivnum.front() != deflen)
+			ss << cdivnum.front();
+		ticksum += zenlen / cdivnum.front();
+	}
+	return ss.str();
+}
 
 class FMChannelBase
 {
@@ -62,9 +87,10 @@ private:
 	int last_note_tick;
 	int oct_offset_from_midi;//MIDI到MML的八度偏移
 	int deflen;
+	int zenlen;
 	int last_midi_octave;
 public:
-	FMChannelBase()
+	FMChannelBase():zenlen(ZENLEN_DEFAULT)
 	{
 		SetOctaveOffsetToMIDI(0);
 	}
@@ -116,12 +142,19 @@ public:
 		deflen = l;
 		AddString("l").AddInt(deflen);
 	}
+	//设置全音符时钟长度
+	void AddSetZenlen(int z)
+	{
+		zenlen = z;
+		AddString("C").AddInt(zenlen);
+	}
 	//0~127
-	void AddSetProgram(uint8_t program)
+	int AddSetProgram(int program)
 	{
 		if (cc_sub % 2 == 1)
 			program += 128;
 		AddString("@").AddInt(program);
+		return program;
 	}
 	//0~127
 	void SetSubProgram(uint8_t sub)
@@ -156,12 +189,7 @@ public:
 		if (tick > last_note_tick)
 			note_divnum = 4.0f*tpq / (tick - last_note_tick);//上一个音符是几分音符
 		if (note_divnum != NOTE_DIVNUM_INFINITY)
-		{
-			AddString(MMLNotes::GetMMLNoteName(last_note_num));
-			//TODO:待测试
-			if ((int)note_divnum != deflen)
-				AddInt((int)note_divnum);
-		}
+			AddString(GetNoteQuantitized(last_note_num, note_divnum, deflen, zenlen).c_str());
 
 		if (note != NOTE_OFF_NUMBER)
 		{
@@ -303,7 +331,8 @@ public:
 			*meta_tempo = "Tempo",//默认60（120）
 			*meta_option = "Option",// /v/c
 			*meta_octave = "Octave",//Normal
-			*meta_fffile = "FFFile";//音色定义文件
+			*meta_fffile = "FFFile",//音色定义文件
+			*meta_zenlen = "Zenlen";//默认全音符时钟长度96
 
 		//八度需要在通道里设置
 	}metaNames;
@@ -358,8 +387,8 @@ public:
 
 struct ProgramChangeCollector
 {
-	std::vector<uint8_t>programs;
-	bool AddProgram(uint8_t p)
+	std::vector<int>programs;
+	bool AddProgram(int p)
 	{
 		for (auto&v : programs)
 			if (p == v)
@@ -427,6 +456,7 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 	mml.AddMetaValue(mml.metaNames.meta_tempo, 60);
 	mml.AddMetaString(mml.metaNames.meta_option, "/v/c");
 	mml.AddMetaString(mml.metaNames.meta_octave, "Normal");
+	mml.AddMetaValue(mml.metaNames.meta_zenlen, ZENLEN_DEFAULT);
 	if (wcslen(ff_file) > 0)
 		mml.AddMetaString(mml.metaNames.meta_fffile, ToStringA(ff_file).c_str());
 	mml.AddNewLine();
@@ -445,6 +475,7 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 	smf::MidiFile mf(ToStringA(midi_file).c_str());
 	mf.joinTracks();
 	smf::MidiEventList &mt = mf[0];
+	ProgramChangeCollector pcc;//音色收集器
 	for (int i = 0; i < mt.getEventCount(); i++)
 	{
 		if (mt[i].isMeta())
@@ -475,7 +506,7 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 				mml.GetChannel(mt[i].getChannel()).AddSetNote(mt[i].tick, NOTE_OFF_NUMBER, mt[i].getP2(), mf.getTPQ());
 				break;
 			case 0xC0://音色变换
-				mml.GetChannel(mt[i].getChannel()).AddSetProgram(mt[i].getP1());
+				pcc.AddProgram(mml.GetChannel(mt[i].getChannel()).AddSetProgram(mt[i].getP1()));
 				break;
 			case 0xB0://CC控制器
 				switch (mt[i].getP1())
@@ -513,6 +544,20 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 			//TODO:节奏通道怎么处理？
 		}
 	}
+	mml.CommitAllChannelData();
+	mml.AddNewLine();
+	mml.AddComment("==============");
+	mml.AddComment("Using Programs");
+	mml.AddComment("==============");
+	pcc.SortAscending();
+	std::stringstream sspcc;
+	for (auto&p : pcc.programs)
+	{
+		if (sspcc.str().length() > 0)
+			sspcc << " ";
+		sspcc << "@" << p;
+	}
+	mml.AddComment(sspcc.str().c_str());
 
 	return mml.SaveToFile(mml_file);
 }
@@ -537,7 +582,9 @@ int wmain(int argc, wchar_t *argv[])
 			swprintf_s(mml_file, L"%s.mml", midi_file);
 		break;
 	default:
-		_putws(L"命令行：midimml <MIDI文件> [MML文件] [整体八度调整] [音色定义文件]");
+		_putws(L"PMD专用MIDI到MML转换程序 by lxfly2000\n"
+			"项目网站：https://github.com/lxfly2000/midimml\n\n"
+			"命令行：midimml <MIDI文件> [MML文件] [整体八度调整] [音色定义文件]");
 #ifdef _DEBUG
 		_getws_s(midi_file);
 		wcscpy_s(mml_file, L"o.mml");
