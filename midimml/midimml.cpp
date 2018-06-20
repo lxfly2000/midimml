@@ -730,7 +730,12 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 	}
 	mml.AddComment(sspcc.str().c_str());
 
-	return mml.SaveToFile(mml_file);
+	int r=mml.SaveToFile(mml_file);
+	if (r == 0)
+		std::wcout << L"文件已保存至\""<<mml_file<<"\".\n";
+	else
+		_putws(L"转换失败。");
+	return r;
 }
 
 
