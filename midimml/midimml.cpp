@@ -293,8 +293,10 @@ private:
 	int r_counter;
 	std::map<int,int>midi_to_mml_rhythm;//K:MIDI键位，V:MML值
 	int mem_note_num;//用于保存音色变换之前的一个音色
+	int note_off_tick;
+	int last_tpq;
 public:
-	KRhythmChannel():r_counter(0)
+	KRhythmChannel():r_counter(0),note_off_tick(0),last_tpq(0)
 	{
 		//https://github.com/lxfly2000/pmdplay
 		std::pair<int, int> table[] = {
@@ -336,12 +338,16 @@ public:
 	{
 		//注意此处的note是放在程序变换里的
 		if (note == NOTE_OFF_NUMBER)
+		{
+			note_off_tick = tick;
 			return;
+		}
 		else if (velocity == 0)
 			return;
 		//https://blog.csdn.net/txh0001/article/details/6243295
 		else if (midi_to_mml_rhythm.find(note) == midi_to_mml_rhythm.end())
 			return;
+		last_tpq = tpq;
 		float note_divnum = NOTE_DIVNUM_INFINITY;//有效取值范围为1~255，INFINITY表示该事件长度为0
 		if (tick > last_note_tick)
 			note_divnum = 4.0f*tpq / (tick - last_note_tick);//上一个音符是几分音符
@@ -361,7 +367,17 @@ public:
 	}
 	void FlushNote()
 	{
-		//TODO:Bug:节奏中缺少最后一个音
+		float note_divnum;
+		if (note_off_tick > last_note_tick)
+			note_divnum = 4.0f*last_tpq / (note_off_tick - last_note_tick);
+		else
+			note_divnum = static_cast<float>(deflen);
+
+		if (mem_note_num != last_note_num)
+			AddSetProgram(last_note_num);
+		AddString(GetNoteQuantitized(0, note_divnum, deflen, zenlen, true).c_str());
+		last_note_num = 0;
+		last_note_tick = note_off_tick;
 	}
 	int AddSetProgram(int program)override
 	{
@@ -376,6 +392,7 @@ public:
 	std::string GetStrToCommit()override
 	{
 		std::stringstream dataToCommit;
+		FlushNote();//放在这里是不是不太合适？
 		dataToCommit << "R" << r_counter << "\t" << ssChannel.str() << std::endl << channel_name << "\tR" << r_counter << std::endl;
 		return dataToCommit.str();
 	}
