@@ -638,7 +638,7 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 	smf::MidiFile mf(ToStringA(midi_file).c_str());
 	if (mf.status() != true)
 	{
-		std::wcout << L"¶ÁÈ¡\"" << midi_file << L"Ê§°Ü¡£\n";
+		std::wcout << L"¶ÁÈ¡\"" << midi_file << L"\"Ê§°Ü¡£\n";
 		return -1;
 	}
 	mf.joinTracks();
