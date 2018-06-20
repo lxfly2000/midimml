@@ -537,6 +537,13 @@ public:
 		for (auto&c : pfmChannels)
 			c->AddChannelInit();
 	}
+	void AddLoop()
+	{
+		CommitAllChannelData();
+		AddNewLine();
+		AddMMLLine("ABCDEFGHIK\tL\t;Delete channels with no following notes before compiling.");
+		AddNewLine();
+	}
 };
 
 struct ProgramChangeCollector
@@ -702,8 +709,7 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 					}
 					break;
 				case 111://RPG Maker循环点
-					for (int i = 0; i < CHANNEL_COUNT; i++)
-						mml.GetChannel(i).AddLoopPoint();
+					mml.AddLoop();
 					break;
 				case 0x32://子音色变换（CC32）
 				case 0x01://Modulation
