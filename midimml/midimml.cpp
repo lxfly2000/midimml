@@ -61,7 +61,7 @@ std::string GetNoteQuantitized(int note, float note_divnum, int deflen,int zenle
 	int ticksum = 0;
 	while (ticksum<note_ticks)
 	{
-		while (ticksum + zenlen / cdivnum.front() > note_ticks)
+		while (cdivnum.size()>0&&ticksum + zenlen / cdivnum.front() > note_ticks)
 			cdivnum.erase(cdivnum.begin());
 		if (cdivnum.empty())
 		{
@@ -636,6 +636,11 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 	mml.AddComment("Main");
 	mml.AddComment("==============");
 	smf::MidiFile mf(ToStringA(midi_file).c_str());
+	if (mf.status() != true)
+	{
+		std::wcout << L"读取\"" << midi_file << L"失败。\n";
+		return -1;
+	}
 	mf.joinTracks();
 	smf::MidiEventList &mt = mf[0];
 	ProgramChangeCollector pcc;//音色收集器
