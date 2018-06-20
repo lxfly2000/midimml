@@ -88,13 +88,13 @@ class FMChannelBase
 protected:
 	std::stringstream ssChannel;
 	std::string channel_name;
-	uint8_t last_note_num;//0~255,255=Off
 	uint8_t last_note_volume;
 	int last_note_tick;
 	int deflen;
 	int zenlen;
 private:
 	uint8_t cc_sub;//奇数时+128，偶数时不加
+	uint8_t last_note_num;//0~255,255=Off
 	int oct_offset_from_midi;//MIDI到MML的八度偏移
 	int last_midi_octave;
 public:
@@ -180,7 +180,7 @@ public:
 	{
 		AddString("V").AddInt(v);
 	}
-	//36~511
+	//36~511, 如需中途变拍，只需在一个通道上指定即可设定所有通道的速度
 	void AddSetTempo(int tempo_of_quart_note)
 	{
 		AddString("t").AddInt(tempo_of_quart_note / 2);
@@ -295,6 +295,7 @@ private:
 	int mem_note_num;//用于保存音色变换之前的一个音色
 	int note_off_tick;
 	int last_tpq;
+	int last_note_num;
 public:
 	KRhythmChannel():r_counter(0),note_off_tick(0),last_tpq(0)
 	{
@@ -330,9 +331,12 @@ public:
 	}
 	void AddChannelInit()override
 	{
-		FMChannelBase::AddChannelInit();
 		last_note_num = 0;//在此处表示@值
-		mem_note_num = 0;
+		mem_note_num = -1;
+	}
+	void AddChannelInitInRDef()
+	{
+		FMChannelBase::AddChannelInit();//因为R定义是互相独立的，KR初始化应添加在每个R定义中
 	}
 	void AddSetNote(int tick, uint8_t note, uint8_t velocity, int tpq)override
 	{
@@ -357,6 +361,8 @@ public:
 		}
 		else//tick向前移动
 		{
+			if (mem_note_num == -1)
+				AddChannelInitInRDef();
 			if (mem_note_num != last_note_num)
 				AddSetProgram(last_note_num);
 			AddString(GetNoteQuantitized(0, note_divnum, deflen, zenlen, true).c_str());
@@ -367,6 +373,8 @@ public:
 	}
 	void FlushNote()
 	{
+		if (last_note_num == 0)
+			return;
 		float note_divnum;
 		if (note_off_tick > last_note_tick)
 			note_divnum = 4.0f*last_tpq / (note_off_tick - last_note_tick);
@@ -404,7 +412,8 @@ public:
 		r_counter++;
 		if (r_counter > 255)
 			std::cout << "R节奏定义数量超过上限。\n";
-		return FMChannelBase::Clear();
+		FMChannelBase::Clear();
+		AddChannelInit();
 	}
 };
 
@@ -637,8 +646,7 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 		{
 			if (mt[i].isTempo())
 			{
-				for (int c = 0; c < CHANNEL_COUNT; c++)
-					mml.GetChannel(c).AddSetTempo((int)mt[i].getTempoBPM());
+				mml.GetChannel(0).AddSetTempo((int)mt[i].getTempoBPM());
 			}
 			else if (mt[i].isTimeSignature())
 			{
