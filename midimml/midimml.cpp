@@ -180,7 +180,8 @@ public:
 	{
 		AddString("V").AddInt(v);
 	}
-	//36~511, 如需中途变拍，只需在一个通道上指定即可设定所有通道的速度
+	//36~511, 如需中途变速，只需在一个通道上指定即可设定所有通道的速度
+	//注意：该指令仅针对当前位置已关闭的（也就是完整的）音符有效，因此该指令可能需要设置在实际的变速位置往后偏移大于0个音符的位置上。
 	void AddSetTempo(int tempo_of_quart_note)
 	{
 		AddString("t").AddInt(tempo_of_quart_note / 2);
@@ -371,10 +372,13 @@ public:
 		}
 		//K通道的音量暂时不做处理（暂定）
 	}
-	void FlushNote()
+	//同步节奏，currentTick为将同步的当前时刻设置为某一时刻，如果为0则不改动
+	void FlushNote(int currentTick)
 	{
 		if (last_note_num == 0)
 			return;
+		if (currentTick)
+			note_off_tick = currentTick;
 		float note_divnum;
 		if (note_off_tick > last_note_tick)
 			note_divnum = 4.0f*last_tpq / (note_off_tick - last_note_tick);
@@ -400,7 +404,7 @@ public:
 	std::string GetStrToCommit()override
 	{
 		std::stringstream dataToCommit;
-		FlushNote();//放在这里是不是不太合适？
+		FlushNote(0);
 		dataToCommit << "R" << r_counter << "\t" << ssChannel.str() << std::endl << channel_name << "\tR" << r_counter << std::endl;
 		return dataToCommit.str();
 	}
@@ -452,7 +456,7 @@ public:
 			v->Clear();
 		beatsPerBar = 4;//建议每4节提交一次
 		InitAllChannels();
-		CommitAllChannelData();
+		CommitAllChannelData(0);
 	}
 	void AddMetaString(const char *meta_name,const char *str)
 	{
@@ -486,18 +490,20 @@ public:
 
 		//八度需要在通道里设置
 	}metaNames;
-	void CommitChannelData(int ch)
+	void CommitChannelData(int ch,int currentTick)
 	{
+		if (ch == 9)
+			((KRhythmChannel*)pfmChannels[ch])->FlushNote(currentTick);
 		if (pfmChannels[ch]->GetChannelStream().str().length() > 0)
 		{
 			ssMML << pfmChannels[ch]->GetStrToCommit();
 			pfmChannels[ch]->Clear();
 		}
 	}
-	void CommitAllChannelData()
+	void CommitAllChannelData(int currentTick)
 	{
 		for (size_t i = 0; i < std::size(pfmChannels); i++)
-			CommitChannelData(i);
+			CommitChannelData(i,currentTick);
 	}
 	void AddNewLine()
 	{
@@ -507,7 +513,7 @@ public:
 	{
 		std::ofstream fo(file);
 		if (!fo)return -1;
-		CommitAllChannelData();
+		CommitAllChannelData(0);
 		fo << ssMML.str();
 		return 0;
 	}
@@ -526,10 +532,10 @@ public:
 			ch = 2;
 		return *pfmChannels[ch];
 	}
-	void SetBeatsPerBar(int bpb)
+	void SetBeatsPerBar(int bpb,int currentTick)
 	{
 		beatsPerBar = bpb;
-		CommitAllChannelData();
+		CommitAllChannelData(currentTick);
 		AddNewLine();
 	}
 	void InitAllChannels()
@@ -537,9 +543,9 @@ public:
 		for (auto&c : pfmChannels)
 			c->AddChannelInit();
 	}
-	void AddLoop()
+	void AddLoop(int currentTick)
 	{
-		CommitAllChannelData();
+		CommitAllChannelData(currentTick);
 		AddNewLine();
 		AddMMLLine("ABCDEFGHIK\tL\t;Delete channels with no following notes before compiling.");
 		AddNewLine();
@@ -663,7 +669,7 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 			else if (mt[i].isTimeSignature())
 			{
 				//https://github.com/lxfly2000/libMidiPlayer/blob/lib_static/MidiPlayer.cpp#L266
-				mml.SetBeatsPerBar(mt[i].data()[3]);
+				mml.SetBeatsPerBar(mt[i].data()[3],mt[i].tick);
 			}
 		}
 		else
@@ -709,7 +715,7 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 					}
 					break;
 				case 111://RPG Maker循环点
-					mml.AddLoop();
+					mml.AddLoop(mt[i].tick);
 					break;
 				case 0x32://子音色变换（CC32）
 				case 0x01://Modulation
@@ -721,7 +727,7 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 			}
 		}
 	}
-	mml.CommitAllChannelData();
+	mml.CommitAllChannelData(0);
 	mml.AddNewLine();
 	mml.AddComment("==============");
 	mml.AddComment("Using voices");
