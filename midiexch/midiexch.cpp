@@ -36,11 +36,14 @@ public:
 	int GetAvailableChannel(int fromCh)
 	{
 		int lastCh = fromCh;
-		for (int i = fromCh; !(i==fromCh&&lastCh!=fromCh); i = (i + 1) % MIDI_CHANNEL_MAX)
+		for (int i = fromCh; !(i == fromCh && lastCh != fromCh);)
 		{
 			if (channelNote[i] == NOTE_OFF_NUMBER)
 				return i;
 			lastCh = i;
+			i = (i + 1) % MIDI_CHANNEL_MAX;
+			if (i == midiDrumChannelIndex)
+				i = (i + 1) % MIDI_CHANNEL_MAX;
 		}
 		return fromCh;
 	}
@@ -66,7 +69,7 @@ int Exchannel(const char *filein, const char *fileout)
 	int note_on_change = 0, note_off_change = 0;
 	for (int i = 0; i < mt.getEventCount(); i++)
 	{
-		if (!mt[i].isMeta())
+		if (!mt[i].isMeta()&&mt[i].getChannel()!=midiDrumChannelIndex)
 		{
 			switch (mt[i].getP0()&0xF0)
 			{
