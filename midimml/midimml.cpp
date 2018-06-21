@@ -102,6 +102,10 @@ public:
 	{
 		SetOctaveOffsetToMIDI(0);
 	}
+	void SetZenlenValue(int z)
+	{
+		zenlen = z;
+	}
 	void SetChannelName(const char *c)
 	{
 		channel_name.assign(c);
@@ -472,6 +476,12 @@ public:
 			ssMML << "\t";
 		ssMML << val << std::endl;
 	}
+	void AddMetaZenlen(int val)
+	{
+		AddMetaValue(metaNames.meta_zenlen, val);
+		for (auto&c : pfmChannels)
+			c->SetZenlenValue(val);
+	}
 	struct MetaNames
 	{
 		const char *meta_title = "Title",//（文件名）
@@ -600,7 +610,7 @@ std::string GetFileNameFromPath(const wchar_t *path)
 }
 
 
-int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offset,const wchar_t *ff_file)
+int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offset,int _zenlen,const wchar_t *ff_file)
 {
 	MMLData mml;
 	mml.AddMetaString(mml.metaNames.meta_title, GetFileNameFromPath(midi_file).c_str());
@@ -623,7 +633,7 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 	mml.AddMetaValue(mml.metaNames.meta_tempo, 60);
 	mml.AddMetaString(mml.metaNames.meta_option, "/v/c");
 	mml.AddMetaString(mml.metaNames.meta_octave, "Normal");
-	mml.AddMetaValue(mml.metaNames.meta_zenlen, ZENLEN_DEFAULT);
+	mml.AddMetaZenlen(_zenlen);
 	if (wcslen(ff_file) > 0)
 		mml.AddMetaString(mml.metaNames.meta_fffile, ToStringA(ff_file).c_str());
 	mml.AddNewLine();
@@ -754,12 +764,14 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 int wmain(int argc, wchar_t *argv[])
 {
 	wchar_t midi_file[_MAX_PATH] = L"", mml_file[_MAX_PATH] = L"", ff_file[_MAX_PATH] = L"";
-	int oct_offset = 0;
+	int oct_offset = 0, zenlen = ZENLEN_DEFAULT;
 	std::locale::global(std::locale(""));
 	switch(argc)
 	{
+	case 6:
+		wcscpy_s(ff_file, argv[5]);
 	case 5:
-		wcscpy_s(ff_file, argv[4]);
+		zenlen = _wtoi(argv[4]);
 	case 4:
 		oct_offset = _wtoi(argv[3]);
 	case 3:
@@ -770,9 +782,10 @@ int wmain(int argc, wchar_t *argv[])
 			swprintf_s(mml_file, L"%s.mml", midi_file);
 		break;
 	default:
-		_putws(L"PMD专用MIDI到MML转换程序 by lxfly2000\n"
+		wprintf(L"PMD专用MIDI到MML转换程序 by lxfly2000\n"
 			"项目网站：https://github.com/lxfly2000/midimml\n\n"
-			"命令行：midimml <MIDI文件> [MML文件] [整体八度调整] [音色定义文件]");
+			"命令行：midimml <MIDI文件> [MML文件] [整体八度调整] [全音符长] [音色定义文件]\n"
+			"八度调整默认%d，\n全音符长范围：1～255，默认%d\n", oct_offset, zenlen);
 #ifdef _DEBUG
 		_getws_s(midi_file);
 		wcscpy_s(mml_file, L"o.mml");
@@ -780,5 +793,5 @@ int wmain(int argc, wchar_t *argv[])
 #endif
 		return 1;
 	}
-	return ConvertToMML(midi_file, mml_file, oct_offset, ff_file);
+	return ConvertToMML(midi_file, mml_file, oct_offset, zenlen, ff_file);
 }
