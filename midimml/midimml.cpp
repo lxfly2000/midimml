@@ -548,6 +548,13 @@ public:
 		CommitAllChannelData(currentTick);
 		AddNewLine();
 	}
+	void FlushAndAddComment(const char *str,int currentTick)
+	{
+		CommitAllChannelData(currentTick);
+		//AddNewLine();
+		AddComment(str);
+		//AddNewLine();
+	}
 	void InitAllChannels()
 	{
 		for (auto&c : pfmChannels)
@@ -680,6 +687,11 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 			{
 				//https://github.com/lxfly2000/libMidiPlayer/blob/lib_static/MidiPlayer.cpp#L266
 				mml.SetBeatsPerBar(mt[i].data()[3],mt[i].tick);
+			}
+			else if (mt[i].isText())
+			{
+				std::string meta_text((char*)mt[i].data() + 3, mt[i].data()[2]);
+				mml.FlushAndAddComment(meta_text.c_str(), mt[i].tick);
 			}
 		}
 		else
