@@ -16,9 +16,9 @@ MMLÏûÏ¢£º
 #define STRING_NOT_SET	"(NOT SET)"
 
 #ifdef _DEBUG
-#pragma comment(lib,"..\\midifile\\visual-studio\\DebugLib\\midifile.lib")
+#pragma comment(lib,"..\\DebugLib\\midifile.lib")
 #else
-#pragma comment(lib,"..\\midifile\\visual-studio\\ReleaseLib\\midifile.lib")
+#pragma comment(lib,"..\\ReleaseLib\\midifile.lib")
 #endif
 
 #include "..\midifile\include\MidiFile.h"

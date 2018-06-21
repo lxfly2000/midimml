@@ -20,9 +20,9 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
-    <ProjectGuid>{12DB0512-28FB-4E73-B637-D830D112CC46}</ProjectGuid>
+    <ProjectGuid>{3CD69FD8-F6FC-4743-B096-8B356F27E606}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>midimml</RootNamespace>
+    <RootNamespace>midiexch</RootNamespace>
     <WindowsTargetPlatformVersion>10.0.17134.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -145,7 +145,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="midimml.cpp" />
+    <ClCompile Include="midiexch.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\midifile\visual-studio\midifile.vcxproj">
