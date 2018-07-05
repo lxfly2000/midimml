@@ -29,6 +29,7 @@ MML消息：
 #include<ctime>
 #include<algorithm>
 #include<map>
+#include<set>
 #include<Windows.h>
 
 #define NOTE_OFF_NUMBER 255
@@ -569,23 +570,6 @@ public:
 	}
 };
 
-struct ProgramChangeCollector
-{
-	std::vector<int>programs;
-	bool AddProgram(int p)
-	{
-		for (auto&v : programs)
-			if (p == v)
-				return false;
-		programs.push_back(p);
-		return true;
-	}
-	void SortAscending()
-	{
-		std::sort(programs.begin(), programs.end());
-	}
-};
-
 std::string ToStringA(const wchar_t *str)
 {
 	char stra[256];
@@ -673,8 +657,8 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 	}
 	mf.joinTracks();
 	smf::MidiEventList &mt = mf[0];
-	ProgramChangeCollector pcc;//音色收集器
-	pcc.AddProgram(PROGRAM_DEFAULT);
+	std::set<int> pcc;//音色收集器
+	pcc.insert(PROGRAM_DEFAULT);
 	for (int i = 0; i < mt.getEventCount(); i++)
 	{
 		if (mt[i].isMeta())
@@ -712,7 +696,7 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 			{
 				int _pc = mml.GetChannel(mt[i].getChannel()).AddSetProgram(mt[i].getP1());
 				if (mt[i].getChannel() < 6)
-					pcc.AddProgram(_pc);
+					pcc.insert(_pc);
 			}
 				break;
 			case 0xB0://CC控制器
@@ -754,9 +738,8 @@ int ConvertToMML(const wchar_t *midi_file, const wchar_t *mml_file,int oct_offse
 	mml.AddComment("==============");
 	mml.AddComment("Using voices");
 	mml.AddComment("==============");
-	pcc.SortAscending();
 	std::stringstream sspcc;
-	for (auto&p : pcc.programs)
+	for (auto&p : pcc)
 	{
 		if (sspcc.str().length() > 0)
 			sspcc << " ";
